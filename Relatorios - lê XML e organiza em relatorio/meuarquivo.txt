@@ -1,0 +1,184 @@
+SELECT                                                      
+   U.PLNDATDIA,                                               
+   U.PLACONTA,
+   U.PLANOME,
+   U.PLNPLANIL,
+   U.LACNUMLAN,
+   U.LACNUMDOC,
+   U.HISTORICO, 
+   U.DEB,                                                           
+   U.CRED, 
+   U.MOVIMENT,
+   U.CONTRAPARTIDA
+   
+FROM                                                            
+ ( SELECT                                                       
+    L.PLACONTA, 
+ DECODE(PD.PLANOME,NULL,C.PLANOME,PD.PLANOME) AS PLANOME, 
+ SC.NOMESUBCONTA, CC.NOME AS NOMECC, C.PLAGRAU, 
+   U.UNECODIGO, U.UNIDNEGOC, U.NOME,    
+(0.00) AS SALDOCABECALHO, (' ') AS DEBCRECABECALHO,  
+   L.PLACONTA AS PLACONTAREF, 
+   NVL(PD.PLANOME,C.PLANOME) AS PLANOMEREF, 
+   L.LACHIST1,L.LACHIST2,L.LACHIST3,L.LACHIST4,L.LACHIST5,L.LACTIPCONVOFICIAL,  
+   (NVL(RTRIM(L.LACHIST1),' ')||' '||NVL(RTRIM(L.LACHIST2),' ')||' '||                  
+    NVL(RTRIM(L.LACHIST3),' ')||' '||NVL(RTRIM(L.LACHIST4),' ')||' '||NVL(RTRIM(L.LACHIST5),' ')) AS HISTORICO, 
+   C.PLACONCORRESP,  
+   L.IDMODULO,                                         
+   P.PLNEFETIVADO, TO_CHAR(P.PLNDATDIA,'YYYYMM') AS PERIODO,   
+   DECODE(P.PLNEFETIVADO,'S','*',' ') AS EFET,             
+   SA.SALDOANT, SS.SALDO, P.PLNCODIGO, P.PLNPLANIL, P.PLNDATDIA, 
+   L.LACVALOR,  
+   TO_NUMBER(DECODE(L.LACDEBCRE, 'D', L.LACVALOR, (L.LACVALOR * (-1)))) AS MOVIMENT,
+   (TO_CHAR(P.PLNPLANIL,'99999999')||'/'||TO_CHAR(L.LACNUMLAN,'9999')) AS LANCAMENTO, 
+   (TO_NUMBER(DECODE(L.LACDEBCRE, 'D', L.LACVALOR, 0.00))) AS DEB,                
+   (TO_NUMBER(DECODE(L.LACDEBCRE, 'C', L.LACVALOR, 0.00))) AS CRED,                   
+   PE.NOME AS NOMEPATRO, PP.NOME AS NOMEPLANOPREV,                    
+   L.IDPATRO, L.IDPLANOPREV,                                          
+   (0.00) AS SALDOCORRENTE,                                           
+   (' ')  AS DEBCRE,                                                
+   DECODE(CP.CONTRAPARTIDA,NULL,CP1.CONTRAPARTIDA,CP.CONTRAPARTIDA) AS CONTRAPARTIDA, 
+   L.CODCENTROCUSTO, L.CODSUBCONTA, L.LACNUMLAN AS LACNUMLAN,         
+   L.LACDEBCRE, L.LACNUMDOC, L.IDEMPRESA, P.IDPESSOA, L.IDPESSOA AS EMPRESALANC    
+FROM                                                                  
+   LANCAMENTO L, PLANILHA P, PLANOCONTA C, SUBCONTA SC, UNIDNEGOCIO U, CENTCUST CC,PESSOA PE, PLANPREVCONTABIL PP, 
+(SELECT P.PLATIPO, P.PLAINATIVA,P.PLANOME, P.PLACONTA, P.PLANO 
+  FROM  PLANOCONTAPER P,                                       
+        (SELECT PLACONTA, PLANO,                               
+               MIN(LPAD(  LPAD(TO_CHAR(NVL(PERNUMERO,0)),2,'0')  ,6,TO_CHAR(PEREXERCICIO) )) AS PERNUMERO 
+         FROM PLANOCONTAPER                                   
+         WHERE (PEREXERCICIO = TO_NUMBER(SUBSTR('2021'||SUBSTR(2021-08-01,3,2),1,4))) 
+           AND (PERNUMERO  = TO_NUMBER(SUBSTR('2021'||SUBSTR(2021-08-01,3,2),5,2)))   
+           AND (IDPESSOA = 1) 
+             GROUP BY  PLACONTA, PLANO) PX 
+  WHERE (P.PLACONTA = PX.PLACONTA) 
+    AND (P.PLANO = PX.PLANO)       
+    AND (P.IDPESSOA = 1) 
+    AND (P.PEREXERCICIO = TO_NUMBER(SUBSTR(PX.PERNUMERO,1,4))) 
+    AND (P.PERNUMERO  = TO_NUMBER(SUBSTR(PX.PERNUMERO,5,2))))  
+ PD, 
+     (SELECT L1.PLNCODIGO, L1.LACNUMLAN, L1.LACDEBCRE,                
+             L1.PLACONTA AS CONTRAPARTIDA                       
+      FROM PLANILHA P1, LANCAMENTO L1, PLANOCONTA C                
+      WHERE                                                        
+            (P1.PLNDATDIA >=TO_DATE('2021-08-01','DD/MM/YYYY'))            
+        AND (P1.PLNDATDIA <=TO_DATE('2021-08-31','DD/MM/YYYY'))            
+        AND (P1.PEREXERCICIO >= '2021')      
+        AND (C.PLANO in (1,2,4))                                  
+        AND (P1.IDPESSOA = 1)                           
+        AND (EXISTS (SELECT X.PLNCODIGO                            
+                     FROM PLANILHA X, LANCAMENTO Y                 
+                     WHERE                                         
+                           (X.PLNDATDIA >=TO_DATE('2021-08-01','DD/MM/YYYY'))                
+                       AND (X.PLNDATDIA <=TO_DATE('2021-08-31','DD/MM/YYYY'))                
+                       AND (X.PEREXERCICIO >= '2021')          
+                     AND (X.IDPESSOA = 1)  
+                     and SUBSTR(RTRIM(y.PLACONTA) ,0,1) >= 3 
+                     AND (X.PLNCODIGO = Y.PLNCODIGO)              
+                       AND (P1.PLNCODIGO = X.PLNCODIGO)))           
+        AND (L1.PLNCODIGO=P1.PLNCODIGO)                             
+        AND (C.PLANO in (1,2,4))                                   
+        AND (L1.LACTIPO = '2')                                    
+        AND (C.PLANO = L1.PLANO)                                    
+        AND (C.PLACONTA = L1.PLACONTA))  CP,                        
+     ( SELECT L2.PLNCODIGO, L2.LACNUMLAN, L2.LACDEBCRE,             
+             L2.PLACONTA AS CONTRAPARTIDA                           
+      FROM PLANILHA P2, LANCAMENTO L2, PLANOCONTA C,                   
+          (SELECT L3.PLNCODIGO, COUNT(*) AS CONTA                      
+           FROM PLANILHA P3, LANCAMENTO L3                             
+           WHERE                                                       
+                 (P3.PLNDATDIA >=TO_DATE('2021-08-01','DD/MM/YYYY'))                             
+             AND (P3.PLNDATDIA <=TO_DATE('2021-08-31','DD/MM/YYYY'))                             
+             AND (P3.PEREXERCICIO >= '2021')                       
+           AND (P3.IDPESSOA = 1)                             
+             AND (P3.PLNCODIGO = L3.PLNCODIGO)                         
+           GROUP BY L3.PLNCODIGO                                      
+           HAVING COUNT(*) = 2) N                                    
+      WHERE                                                          
+            (P2.PLNDATDIA >=TO_DATE('2021-08-01','DD/MM/YYYY') )              
+        AND (P2.PLNDATDIA <=TO_DATE('2021-08-31','DD/MM/YYYY') )              
+        AND (P2.PEREXERCICIO >= '2021')                           
+           AND (P2.IDPESSOA = 1)                              
+        AND (EXISTS (SELECT X.PLNCODIGO                                
+                     FROM PLANILHA X, LANCAMENTO Y                     
+                     WHERE                                             
+                           (X.PLNDATDIA >= TO_DATE('2021-08-01','DD/MM/YYYY')) 
+                       AND (X.PLNDATDIA <= TO_DATE('2021-08-31','DD/MM/YYYY')) 
+                       AND (X.PEREXERCICIO >= '2021')              
+                     AND (X.IDPESSOA = 1)              
+                       AND (X.PLNCODIGO = Y.PLNCODIGO) 
+                       and  SUBSTR(RTRIM(y.PLACONTA) ,0,1) >= 3 
+                              
+         AND (P2.PLNCODIGO = X.PLNCODIGO)))               
+         AND (L2.PLNCODIGO = P2.PLNCODIGO)                               
+         AND (L2.LACTIPO <> '2' )                                     
+         AND (C.PLANO = L2.PLANO)                                       
+         AND (C.PLACONTA = L2.PLACONTA)                                 
+        AND (C.PLANO in (1,2,4))                                   
+         AND (N.PLNCODIGO = L2.PLNCODIGO)) CP1,                         
+   (SELECT                                                              
+       S.PLACONTA,                                                      
+       SUM(TO_NUMBER(DECODE(S.PLSDEBITOCORRENTE, NULL, 0.00, S.PLSDEBITOCORRENTE)) - TO_NUMBER(DECODE(S.PLSCREDITOCOR, NULL, 0.00, S.PLSCREDITOCOR))) AS SALDOANT 
+    FROM PLANOSALDO S  ,SUBCONTA SC                                      
+    WHERE                                                                
+	      (S.PEREXERCICIO ='2021') AND                                  
+       (S.PERNUMERO IS NULL) AND                                         
+         (S.PLANO in(1,2,4)) AND                               
+       SUBSTR(RTRIM(S.PLACONTA) ,0,1) >= 3 and                                 
+       (S.IDPESSOA = 1)  AND                                 
+      (S.CODSUBCONTA = SC.CODSUBCONTA(+)) AND                           
+      (S.IDPESSOA    = SC.IDPESSOA(+))                                  
+    GROUP BY S.PLACONTA                                                 
+    ) SA,                                                             
+   (SELECT                                                               
+       L.PLACONTA,                                                       
+       SUM(DECODE(L.LACDEBCRE, 'D', L.LACVALOR, (L.LACVALOR * (-1)))) AS SALDO
+    FROM PLANILHA P, LANCAMENTO L, SUBCONTA SC                                     
+    WHERE                                                               
+	         (P.PEREXERCICIO ='2021') AND                              
+          (P.PLNDATDIA < TO_DATE('2021-08-01','DD/MM/YYYY')) AND 
+       (P.PLNEFETIVADO = 'S') AND                                  
+          (P.IDPESSOA = 1) AND  
+          SUBSTR(RTRIM(L.PLACONTA) ,0,1) >= 3 and 
+                             
+       (L.CODSUBCONTA = SC.CODSUBCONTA(+)) AND                        
+       (L.IDPESSOA = SC.IDPESSOA(+))  AND                            
+       (L.PLNCODIGO = P.PLNCODIGO)                                   
+    GROUP BY L.PLACONTA                                               
+    ) SS                                                              
+WHERE                                                                 
+    (P.PLNDATDIA >=TO_DATE('2021-08-01','DD/MM/YYYY')) AND                   
+    (P.PLNDATDIA <=TO_DATE('2021-08-31','DD/MM/YYYY')) AND                   
+    (P.PEREXERCICIO >= '2021') AND 
+ (P.PLNEFETIVADO = 'S') AND                                      
+   (P.IDPESSOA = 1) AND                                  
+    (L.PLNCODIGO = P.PLNCODIGO) AND  
+    SUBSTR(RTRIM(L.PLACONTA) ,0,1) >= 3 and 
+                        
+    (C.PLANO      = PD.PLANO(+)) AND                                 
+    (C.PLACONTA   = PD.PLACONTA(+)) AND                              
+         (C.PLANO in (1,2,4)) AND                                  
+    ((L.UNIDNEGOC = U.UNIDNEGOC(+)) AND                              
+    (L.IDPESSOA   = U.IDPESSOA(+))) AND                              
+   (L.PLNCODIGO = CP.PLNCODIGO(+)) AND                            
+   (L.LACNUMLAN = CP.LACNUMLAN(+)) AND                            
+   ((L.LACDEBCRE <> CP.LACDEBCRE) OR (CP.LACDEBCRE IS NULL)) AND  
+   (L.PLNCODIGO = CP1.PLNCODIGO(+)) AND                           
+   (L.LACDEBCRE <> CP1.LACDEBCRE(+)) AND                          
+    (L.IDPLANOPREV = PP.IDPLANOPREV(+)) AND                          
+    (L.IDPATRO      = PE.IDPESSOA(+)) AND                                 
+    (L.CODCENTROCUSTO = CC.CODCENTROCUSTO(+)) AND                    
+    (L.IDEMPRESA = CC.IDEMPRESA(+)) AND                              
+    (L.PLACONTA = SA.PLACONTA(+)) AND                                
+    (L.PLACONTA = SS.PLACONTA(+)) AND                                
+    (L.CODSUBCONTA = SC.CODSUBCONTA(+)) AND                          
+    (L.IDPESSOA    = SC.IDPESSOA(+)) AND                             
+    (L.PLANO       = C.PLANO) AND                                    
+    (L.PLACONTA    = C.PLACONTA)                                     
+) U, EMPRESAPROP EMP  WHERE (1 = 1) AND EMP.IDPESSOA = U.EMPRESALANC
+ORDER BY 
+    U.PLACONTAREF, U.PLNDATDIA, U.PLNPLANIL, U.LACNUMLAN
+    
+    
+   
+    
